@@ -2,15 +2,17 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define SIZE 1024
+#define SIZE 100000
 
 __global__ void vectorMult(float *a, float *b, float *c, int n)
 {
-	int i = threadIdx.x;
 
-	if (i < n)
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+	while (i < n)
 	{
 		c[i] = a[i] * b[i];
+		i+= blockDim.x * gridDim.x;
 	}
 }
 
@@ -30,9 +32,9 @@ int main()
 	cudaMalloc(&d_b, SIZE*sizeof(float));
 	cudaMalloc(&d_c, SIZE*sizeof(float));
 
-	for(i = 0; i < SIZE; ++i)
+	for(i = 0; i < SIZE; i++)
 	{
-		a[i] = b[i] = i;
+		a[i] = b[i] = (float)i;
 		c[i] = 0;
 	}
 
@@ -40,19 +42,25 @@ int main()
 	cudaMemcpy(d_b, b, SIZE*sizeof(float), cudaMemcpyHostToDevice);
 	cudaMemcpy(d_c, c, SIZE*sizeof(float), cudaMemcpyHostToDevice);
 
+	int count = 0;
+
 	baseTime = curTime = time(NULL);
 	while(curTime < baseTime + 10) //Runs for about 10 seconds
 	{
-		vectorMult<<< 1, SIZE >>>(d_a, d_b, d_c, SIZE);
+		count++;
+		cudaDeviceSynchronize();
+		vectorMult<<< (SIZE+511)/512, 512 >>>(d_a, d_b, d_c, SIZE);
 		curTime = time(NULL);
 	}
 
 	cudaMemcpy(c, d_c, SIZE*sizeof(float), cudaMemcpyDeviceToHost);
 
-	for (i = 0; i < 20; ++i)
+	printf("Call Count: %d\n", count);
+	for (i = 0; i < 10; ++i)
 	{
 		printf("c[%d] = %f\n", i, c[i]);
 	}
+	printf("c[99,999] = %f\n", c[SIZE-1]);
 
 	free(a);
 	free(b);
@@ -64,3 +72,4 @@ int main()
 
 	return 0;
 }
+
