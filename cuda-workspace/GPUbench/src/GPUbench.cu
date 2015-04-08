@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-
-#define SIZE 100000
+#include <unistd.h>
+#include <ctype.h>
 
 __global__ void vectorMult(float *a, float *b, float *c, int n)
 {
@@ -16,51 +16,73 @@ __global__ void vectorMult(float *a, float *b, float *c, int n)
 	}
 }
 
-int main()
+int main(int argc, char **argv)
 {
 	float *a, *b, *c;
 	float *d_a, *d_b, *d_c;
 	int i;
 
+	int size = 100000;
+	int elapsed_time = 10;
+	int option;
+
+	while ((option = getopt (argc, argv, "s:t:")) != -1)
+	{
+		switch (option)
+		{
+		case 's':
+			size = atoi(optarg);
+			break;
+		case 't':
+			elapsed_time = atoi(optarg);
+			break;
+		case '?':
+			if (optopt == 's' || optopt == 't')
+				fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+			else if (isprint (optopt))
+				fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+			else
+				fprintf (stderr,
+					   "Unknown option character `\\x%x'.\n",
+					   optopt);
+			return 1;
+		default:
+			abort ();
+		}
+	}
+
 	time_t curTime, baseTime;
 
-	a = (float*)malloc(SIZE*sizeof(float));
-	b = (float*)malloc(SIZE*sizeof(float));
-	c = (float*)malloc(SIZE*sizeof(float));
+	a = (float*)malloc(size*sizeof(float));
+	b = (float*)malloc(size*sizeof(float));
+	c = (float*)malloc(size*sizeof(float));
 
-	cudaMalloc(&d_a, SIZE*sizeof(float));
-	cudaMalloc(&d_b, SIZE*sizeof(float));
-	cudaMalloc(&d_c, SIZE*sizeof(float));
+	cudaMalloc(&d_a, size*sizeof(float));
+	cudaMalloc(&d_b, size*sizeof(float));
+	cudaMalloc(&d_c, size*sizeof(float));
 
-	for(i = 0; i < SIZE; i++)
+	for(i = 0; i < size; i++)
 	{
 		a[i] = b[i] = (float)i;
 		c[i] = 0;
 	}
 
-	cudaMemcpy(d_a, a, SIZE*sizeof(float), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_b, b, SIZE*sizeof(float), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_c, c, SIZE*sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_a, a, size*sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_b, b, size*sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_c, c, size*sizeof(float), cudaMemcpyHostToDevice);
 
 	int count = 0;
 
 	baseTime = curTime = time(NULL);
-	while(curTime < baseTime + 10) //Runs for about 10 seconds
+	while(curTime < baseTime + elapsed_time)
 	{
 		count++;
 		cudaDeviceSynchronize();
-		vectorMult<<< (SIZE+511)/512, 512 >>>(d_a, d_b, d_c, SIZE);
+		vectorMult<<< (size+511)/512, 512 >>>(d_a, d_b, d_c, size);
 		curTime = time(NULL);
 	}
 
-	cudaMemcpy(c, d_c, SIZE*sizeof(float), cudaMemcpyDeviceToHost);
-
-	printf("Call Count: %d\n", count);
-	for (i = 0; i < 10; ++i)
-	{
-		printf("c[%d] = %f\n", i, c[i]);
-	}
-	printf("c[99,999] = %f\n", c[SIZE-1]);
+	cudaMemcpy(c, d_c, size*sizeof(float), cudaMemcpyDeviceToHost);
 
 	free(a);
 	free(b);
