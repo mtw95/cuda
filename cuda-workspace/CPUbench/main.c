@@ -7,7 +7,7 @@
 
 struct ThreadStruct {
 	float *a, *b, *c;
-	int size, time;
+	int size, elapsed_time;
 };
 
 void vectorMult(float *a, float *b, float *c, int n)
@@ -20,16 +20,20 @@ void vectorMult(float *a, float *b, float *c, int n)
 	}
 }
 
-void threads(struct ThreadStruct *data)
+void *threads(void *threadarg)
 {
 	time_t curTime, baseTime;
 
+	struct ThreadStruct *data;
+	data = (struct ThreadStruct*) threadarg;
+
 	baseTime = curTime = time(NULL);
-	while(curTime < baseTime + data->time) //Runs for 10 seconds
+	while(curTime < baseTime + data->elapsed_time) //Runs for 10 seconds
 	{
 		vectorMult(data->a, data->b, data->c, data->size);
 		curTime = time(NULL);
 	}
+	return NULL;
 }
 
 
@@ -38,7 +42,7 @@ int main(int argc, char **argv)
 {
 	int cores = 4;
 	int size = 100000;
-	int time = 10;
+	int elapsed_time = 10;
 	int option;
 
 	while ((option = getopt (argc, argv, "s:t:c:")) != -1)
@@ -49,7 +53,7 @@ int main(int argc, char **argv)
 			size = atoi(optarg);
 			break;
 		case 't':
-			time = atoi(optarg);
+			elapsed_time = atoi(optarg);
 			break;
 		case 'c':
 			cores = atoi(optarg);
@@ -85,10 +89,10 @@ int main(int argc, char **argv)
 		c[i] = 0;
 	}
 
-	struct ThreadStruct data = {a, b, c, size, time};
+	struct ThreadStruct Threaddata = {a, b, c, size, elapsed_time};
 
 	for (i = 0; i < cores; ++i)
-		pthread_create(&thread[i], NULL, threads, &data);
+		pthread_create(&thread[i], NULL, threads, (void*) &Threaddata);
 
 	for (i = 0; i < cores; ++i)
 		pthread_join(thread[i],NULL);
@@ -97,6 +101,8 @@ int main(int argc, char **argv)
 	free(a);
 	free(b);
 	free(c);
+
+	printf("Test Complete");
 
 	return 0;
 }

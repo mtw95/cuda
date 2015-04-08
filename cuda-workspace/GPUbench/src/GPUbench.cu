@@ -92,6 +92,8 @@ int main(int argc, char **argv)
 	cudaFree(d_b);
 	cudaFree(d_c);
 
+	printf("Test Complete");
+
 	return 0;
 }
 
