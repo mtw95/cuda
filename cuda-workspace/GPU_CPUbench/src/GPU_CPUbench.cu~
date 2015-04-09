@@ -10,7 +10,18 @@ struct ThreadStruct {
 	int size, elapsed_time;
 };
 
-void vectorMult(float *a, float *b, float *c, int n)
+__global__ void vectorMultGPU(float *a, float *b, float *c, int n)
+{
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+	while (i < n)
+	{
+		c[i] = a[i] * b[i];
+		i+= blockDim.x * gridDim.x;
+	}
+}
+
+void vectorMultCPU(float *a, float *b, float *c, int n)
 {
 	int i;
 
@@ -20,7 +31,7 @@ void vectorMult(float *a, float *b, float *c, int n)
 	}
 }
 
-void *threads(void *threadarg)
+void *threadCPU(void *threadarg)
 {
 	time_t curTime, baseTime;
 
@@ -30,13 +41,11 @@ void *threads(void *threadarg)
 	baseTime = curTime = time(NULL);
 	while(curTime < baseTime + data->elapsed_time) //Runs for 10 seconds
 	{
-		vectorMult(data->a, data->b, data->c, data->size);
+		vectorMultCPU(data->a, data->b, data->c, data->size);
 		curTime = time(NULL);
 	}
 	return NULL;
 }
-
-
 
 int main(int argc, char **argv)
 {
@@ -73,36 +82,59 @@ int main(int argc, char **argv)
 		}
 	}
 
-	pthread_t *thread = (pthread_t*)malloc(cores*sizeof(pthread_t));
+	pthread_t *thread_arr = (pthread_t*)malloc(cores*sizeof(pthread_t));
 
-	float *a, *b, *c;
+	float *a, *b, *c, *GPUout;
+	float *d_a, *d_b, *d_c;
 	int i;
-
 
 	a = (float*)malloc(size*sizeof(float));
 	b = (float*)malloc(size*sizeof(float));
 	c = (float*)malloc(size*sizeof(float));
+	GPUout = (float*)malloc(size*sizeof(float));
 
-	for (i = 0; i < size; ++i)
+	cudaMalloc(&d_a, size*sizeof(float));
+	cudaMalloc(&d_b, size*sizeof(float));
+	cudaMalloc(&d_c, size*sizeof(float));
+
+	for(i = 0; i < size; ++i)
 	{
 		a[i] = b[i] = i;
 		c[i] = 0;
 	}
 
+	cudaMemcpy(d_a, a, size*sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_b, b, size*sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_c, c, size*sizeof(float), cudaMemcpyHostToDevice);
+
+	time_t curTime, baseTime;
 	struct ThreadStruct Threaddata = {a, b, c, size, elapsed_time};
 
 	for (i = 0; i < cores; ++i)
-		pthread_create(&thread[i], NULL, threads, (void*) &Threaddata);
+		pthread_create(&thread_arr[i], NULL, threadCPU, (void *) &Threaddata);
+
+	baseTime = curTime = time(NULL);
+	while(curTime < baseTime + elapsed_time)
+	{
+		cudaDeviceSynchronize();
+		vectorMultGPU<<< (size+511)/512, 512 >>>(d_a, d_b, d_c, size);
+		curTime = time(NULL);
+	}
 
 	for (i = 0; i < cores; ++i)
-		pthread_join(thread[i],NULL);
+		pthread_join(thread_arr[i],NULL);
 
+	cudaMemcpy(GPUout, d_c, size*sizeof(float), cudaMemcpyDeviceToHost);
 
 	free(a);
 	free(b);
 	free(c);
 
-	printf("Test Complete\n");
+	cudaFree(d_a);
+	cudaFree(d_b);
+	cudaFree(d_c);
+
+	printf("Test Complete");
 
 	return 0;
 }

@@ -102,7 +102,7 @@ int main(int argc, char **argv)
 	free(b);
 	free(c);
 
-	printf("Test Complete\n");
+	printf("Test Complete");
 
 	return 0;
 }
